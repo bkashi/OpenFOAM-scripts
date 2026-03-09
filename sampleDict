@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  13                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+type            sets;
+libs            ("libsampling.so");
+
+interpolationScheme cellPatchConstrained;
+setFormat       raw; // Options: gnuplot, xmgr, raw, csv
+
+sets
+(
+    wallData
+    {
+        type    lineUniform;
+        axis    x;
+        start   (0.0  0.0495 0.0);
+        end     (10.0  0.0495 0.0);
+        nPoints 500;
+    }
+);
+
+fields          (T "grad(U)");
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
