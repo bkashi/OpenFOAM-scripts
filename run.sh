@@ -1,51 +1,79 @@
-#!/bin/sh
-cd ${0%/*} || exit 1    # Run from this directory
+#!/bin/bash
+# Centralized Case Manager
+# Usage: ./run.sh         (Continue)
+#        ./run.sh -new    (Clean + Restart)
+#        ./run.sh -mesh   (Clean + Mesh + Restart)
+
+# Support for hard links: operate in the current working directory
+CASE_DIR=$(pwd)
+cd "$CASE_DIR" || exit 1
 
 . $WM_PROJECT_DIR/bin/tools/RunFunctions
 . ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions
 
 
-# ------------- run the solver ------------------#
-# fresh start if -c not iven
-if [ "$1" != "-c" ]; then
-    echo "Fresh start: Cleaning case..."
-	rm -rf postProcessing
-	rm -rf $(foamListTimes -noZero)
-	rm -rf processor*
-	rm -f log.decomposePar
-	runApplication decomposePar
-fi
-rm -f log.foamRun
+# --- 1. Exclusive Setup Block ---
+case "$1" in
+    -new|-mesh)
+        echo "Stopping existing processes and cleaning case..."
+        killall -q foamRun
+        killall -q gnuplot
+        sleep 1
+
+        # Clean case
+        rm -rf postProcessing processor* log.decomposePar log.foamRun
+        rm -rf $(foamListTimes -noZero)
+		rm -rf 0
+		cp -r 0.orig 0
+		
+        if [ "$1" == "-mesh" ]; then
+            echo "Generating mesh..."
+            rm log.blockMesh log.extrudeMesh log.checkMesh
+            runApplication blockMesh
+            runApplication extrudeMesh
+            checkMesh 2>&1 | tee -a log.checkMesh
+        fi
+
+        echo "Decomposing case..."
+        runApplication decomposePar -latestTime
+        latest_res="0"
+        ;;
+
+    *)
+        # Default/Continue: Find the latest residuals directory
+        echo "Continuing simulation..."
+		sleep 1
+		echo "."
+		sleep 1
+		echo ".."
+		sleep 1
+		echo "..."
+        latest_res=$(ls -v postProcessing/residuals/ 2>/dev/null | tail -n 1)
+        latest_res=${latest_res:-0}
+        echo $latest_res
+        ;;
+esac
+
+
+# --- 2. Launch Solver ---
+echo "Starting foamRun in parallel..."
+mv log.foamRun log.foamRun.latest_res
 runParallel foamRun &
 
-# ---------------- launch monitor -----------------#
 
-# get latest residuals file
-if [ "$1" = "-c" ]; then
-	latest_res=$(ls -v postProcessing/residuals/ | tail -n 1)
-else
-	latest_res="0"
-fi
+# --- 3. Monitor Initialization ---
 res_file="postProcessing/residuals/${latest_res}/residuals.dat"
 
-echo "latest residuals file: ${latest_res}"
-echo "\nWaiting for solver to initialize..."
-
-# Loop until file exists and has 12 lines (2 header + 10 data)
-while [ ! -f "$res_file" ] || [ $(wc -l < "$res_file") -lt 4 ]
+while [ ! -f "$res_file" ] || [ $(wc -l < "$res_file") -lt 14 ]
 do
     if [ -f "$res_file" ]; then
-        LINES=$(wc -l < "$res_file")
-        # %s is a string placeholder, \r is the carriage return
-        echo "Current iterations: $((LINES-2))"
+        echo -ne "Current iterations: $(($(wc -l < "$res_file")-2))\r"
     else
-        echo "Waiting for file creation...   \r"
+        echo -ne "Waiting for solver output... \r"
     fi
-    sleep 6
+    sleep 2
 done
+echo -e "\nSolver ready."
 
-gnuplot ~/scripts/myFoamMonitor.gp &
-
-
-#------------------------------------------------------------------------------
- 
+# Launch Gnuplot Dashboard
+gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
