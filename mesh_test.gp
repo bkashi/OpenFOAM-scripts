@@ -11,8 +11,6 @@ alpha = 1.667e-8  # as set in function object for scalar transport
 d = 0.1  # from blockMeshDict
 u = 0.015  # from 0/U then scaled from the inlet to the pipe (D/d)^2 = 16
 dTdy = 3000  # fixedGradient in 0/T
-rho = 1000  # required for mu, required for Cf
-mu = nu*rho  # required for Cf
 C = 4*alpha*dTdy/(d*u)  # const. for later bulk temp. calc.
 
 
