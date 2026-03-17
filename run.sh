@@ -1,10 +1,6 @@
 #!/bin/bash
 # Centralized Case Manager
-# Usage: ./run.sh         (Continue)
-#        ./run.sh -new    (Clean + Restart)
-#        ./run.sh -mesh   (Clean + Mesh + Restart)
 
-# Support for hard links: operate in the current working directory
 CASE_DIR=$(pwd)
 cd "$CASE_DIR" || exit 1
 
@@ -12,68 +8,96 @@ cd "$CASE_DIR" || exit 1
 . ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions
 
 
-# --- 1. Exclusive Setup Block ---
+# --- 1. Option Selector by ARG1 ---
 case "$1" in
-    -new|-mesh)
-        echo "Stopping existing processes and cleaning case..."
-        killall -q foamRun
-        killall -q gnuplot
-        sleep 1
-
-        # Clean case
-        rm -rf postProcessing processor* log.decomposePar log.foamRun
+    -clean)
+        echo "Cleaning case..."
+        pkill foamRun
+        pkill  gnuplot
+        rm -rf postProcessing processor* dynamicCode log.*
         rm -rf $(foamListTimes -noZero)
-		rm -rf 0
-		cp -r 0.orig 0
-		
-        if [ "$1" == "-mesh" ]; then
-            echo "Generating mesh..."
-            rm log.blockMesh log.extrudeMesh log.checkMesh
-            runApplication blockMesh
-            runApplication extrudeMesh
-            checkMesh 2>&1 | tee -a log.checkMesh
+        if [ -d 0.orig ]; then
+            rm -rf 0
+            cp -r 0.orig 0
         fi
+        exit 0
+        ;;
 
-        echo "Decomposing case..."
-        runApplication decomposePar -latestTime
+    -mesh)
+        echo "Cleaning and generating mesh..."
+        pkill foamRun
+        pkill  gnuplot
+        rm -rf postProcessing processor* dynamicCode log.*
+        rm -rf $(foamListTimes -noZero)
+        if [ -d 0.orig ]; then
+            rm -rf 0
+            cp -r 0.orig 0
+        fi
+        runApplication blockMesh
+        runApplication extrudeMesh
+        checkMesh 2>&1 | tee log.checkMesh
+        exit 0
+        ;;
+
+    -init)
+        echo "Cleaning and initializing fields..."
+        pkill foamRun
+        pkill  gnuplot
+        rm -rf postProcessing processor* dynamicCode log.initT log.foamRun log.decomposePar log.potentialFoam
+        rm -rf $(foamListTimes -noZero)
+        if [ -d 0.orig ]; then
+            rm -rf 0
+            cp -r 0.orig 0
+        fi
+        potentialFoam -writep -writePhi 2>&1 | tee log.potentialFoam
+		ORIG_END=$(grep "endTime" system/controlDict | grep -oE '[0-9.]+' | head -1)
+		sed -i "0,/endTime/s/endTime.*/endTime 1;/" system/controlDict
+        foamRun > log.initT
+        sed -i "0,/endTime/s/endTime.*/endTime $ORIG_END;/" system/controlDictt
+        echo "Initialization complete. Verify in ParaView."
+        exit 0
+        ;;
+
+    -new)
+        echo "Cleaning and starting new run (skipping mesh)..."
+		pkill foamRun
+        pkill  gnuplot
+        rm -rf postProcessing processor* dynamicCode log.foamRun log.decomposePar log.initT log.potentialFoam
+        rm -rf $(foamListTimes -noZero)
         latest_res="0"
         ;;
 
+    -help)
+        echo "Usage: ./run.sh [OPTION]"
+        echo "  (no option)  Continue simulation"
+        echo "  -clean       Just clean the case"
+        echo "  -mesh        Clean and generate mesh ONLY"
+        echo "  -init        Clean and initialize U/p/T (no solver run)"
+        echo "  -new         Clean and run from 0 (uses existing mesh)"
+        echo "  -help        Print these options"
+        exit 0
+        ;;
+
     *)
-        # Default/Continue: Find the latest residuals directory
         echo "Continuing simulation..."
-		sleep 1
-		echo "."
-		sleep 1
-		echo ".."
-		sleep 1
-		echo "..."
         latest_res=$(ls -v postProcessing/residuals/ 2>/dev/null | tail -n 1)
         latest_res=${latest_res:-0}
-        echo $latest_res
         ;;
 esac
 
 
 # --- 2. Launch Solver ---
-echo "Starting foamRun in parallel..."
-mv log.foamRun log.foamRun.latest_res
+runApplication decomposePar -latestTime
 runParallel foamRun &
 
 
-# --- 3. Monitor Initialization ---
-res_file="postProcessing/residuals/${latest_res}/residuals.dat"
-
-while [ ! -f "$res_file" ] || [ $(wc -l < "$res_file") -lt 14 ]
-do
-    if [ -f "$res_file" ]; then
-        echo -ne "Current iterations: $(($(wc -l < "$res_file")-2))\r"
-    else
-        echo -ne "Waiting for solver output... \r"
-    fi
-    sleep 2
+# --- 3. Monitor ---
+while ! grep -q "Time = 5s" log.foamRun; do
+    echo "Waiting for 5 iterations..."
+    sleep 3
 done
-echo -e "\nSolver ready."
 
-# Launch Gnuplot Dashboard
-gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
+if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
+    echo "Launching Gnuplot monitor..."
+    gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
+fi
