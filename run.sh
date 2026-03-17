@@ -7,6 +7,14 @@ cd "$CASE_DIR" || exit 1
 . $WM_PROJECT_DIR/bin/tools/RunFunctions
 . ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions
 
+echo
+echo "Usage: ./run.sh [OPTION]"
+echo "  -clean       Just clean the case"
+echo "  -mesh        Clean and generate mesh ONLY"
+echo "  -init        Clean and initialize U/p/T (no solver run)"
+echo "  -cont        Continue solving"
+echo "  -new         Clean and run from 0 (uses existing mesh)"
+echo
 
 # --- 1. Option Selector by ARG1 ---
 case "$1" in
@@ -53,7 +61,7 @@ case "$1" in
 		ORIG_END=$(grep "endTime" system/controlDict | grep -oE '[0-9.]+' | head -1)
 		sed -i "0,/endTime/s/endTime.*/endTime 1;/" system/controlDict
         foamRun > log.initT
-        sed -i "0,/endTime/s/endTime.*/endTime $ORIG_END;/" system/controlDictt
+        sed -i "0,/endTime/s/endTime.*/endTime $ORIG_END;/" system/controlDict
         echo "Initialization complete. Verify in ParaView."
         exit 0
         ;;
@@ -65,39 +73,35 @@ case "$1" in
         rm -rf postProcessing processor* dynamicCode log.foamRun log.decomposePar log.initT log.potentialFoam
         rm -rf $(foamListTimes -noZero)
         latest_res="0"
+        runApplication decomposePar -latestTime
+        runParallel foamRun &
+        while ! grep -q "Time = 5s" log.foamRun; do
+            echo "Waiting for 5 iterations..."
+            sleep 3
+        done
+        if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
+            echo "Launching Gnuplot monitor..."
+            gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
+        fi
         ;;
 
-    -help)
-        echo "Usage: ./run.sh [OPTION]"
-        echo "  (no option)  Continue simulation"
-        echo "  -clean       Just clean the case"
-        echo "  -mesh        Clean and generate mesh ONLY"
-        echo "  -init        Clean and initialize U/p/T (no solver run)"
-        echo "  -new         Clean and run from 0 (uses existing mesh)"
-        echo "  -help        Print these options"
-        exit 0
-        ;;
-
-    *)
+	-cont)
         echo "Continuing simulation..."
         latest_res=$(ls -v postProcessing/residuals/ 2>/dev/null | tail -n 1)
         latest_res=${latest_res:-0}
+        rm log.decomposePar log.foamRun
+        runApplication decomposePar -latestTime
+        runParallel foamRun &
+        while ! grep -q "Time = 5s" log.foamRun; do
+            echo "Waiting for 5 iterations..."
+            sleep 3
+        done
+        if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
+            echo "Launching Gnuplot monitor..."
+            gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
+        fi
         ;;
+
+    *)
 esac
 
-
-# --- 2. Launch Solver ---
-runApplication decomposePar -latestTime
-runParallel foamRun &
-
-
-# --- 3. Monitor ---
-while ! grep -q "Time = 5s" log.foamRun; do
-    echo "Waiting for 5 iterations..."
-    sleep 3
-done
-
-if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
-    echo "Launching Gnuplot monitor..."
-    gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
-fi
