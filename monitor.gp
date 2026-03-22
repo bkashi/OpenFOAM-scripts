@@ -39,13 +39,16 @@ nCells = system("grep 'cells:' log.checkMesh | cut -c 22-")
 
 # setup figure
 set object 1 rectangle from screen 0,0 to screen 1,1 behind fillcolor rgb "#333333" fillstyle solid 1.0
+set object 2 rectangle from screen 0.81,0.81 to screen 0.99,0.97 behind fillcolor rgb "black" fillstyle solid 1.0
+set object 3 rectangle from screen 0.81,0.61 to screen 0.99,0.77 behind fillcolor rgb "black" fillstyle solid 1.0
+set object 4 rectangle from screen 0.0,0.0 to screen 1,0.04 behind fillcolor rgb "black" fillstyle solid 1.0
 set border lc rgb "white"
 set key tc rgb "white" outside bottom center horizontal maxrows 3 spacing 1.4 samplen 2
 set key box lc rgb "white"
 set grid
-set term qt title "OpenFOAM Dashboard" size 1400,900 font ",14" noenhanced
-set size 0.8, 0.93
-set origin 0.01, 0.07
+set term qt title "OpenFOAM Dashboard" size 1920,950 font ",14" noenhanced
+set size 0.76, 0.9
+set origin 0.02, 0.08
 set ytics nomirror tc rgb "white"
 set ylabel "Residuals" tc rgb "white" font ",16"
 set logscale y
@@ -54,8 +57,6 @@ set y2tics tc rgb "white"
 set y2label "Normalized Probes" tc rgb "white" font ",16"
 set y2range [0:1.1] 
 unset logscale y2
-set arrow 1 from screen 0, 0.04 to screen 1, 0.04 nohead lc rgb "white" lw 2
-set arrow 2 from screen 0.8, 0.04 to screen 0.8, 1 nohead lc rgb "white" lw 2
 
 
 s = 2  # set number of entries to skip 
@@ -63,12 +64,12 @@ c_iter = 500;  # set number of iterations for convergence calc.
 
 
 # print static info
-set label 101 "Started............. ".start at screen 0.82, 0.96 tc rgb "yellow" font "Arial,16"
-set label 102 "Cells.................".nCells at screen 0.82, 0.76 tc rgb "yellow" font "Arial,16"
-set label 103 "Processes........".nProcs at screen 0.82, 0.81 tc rgb "yellow" font "Arial,16"
+set label 101 "Started............. ".start at screen 0.82, 0.945 tc rgb "white" font "Arial,16"
+set label 102 "Cells.................".nCells at screen 0.82, 0.695 tc rgb "white" font "Arial,16"
+set label 103 "Processes........".nProcs at screen 0.82, 0.745 tc rgb "white" font "Arial,16"
 help = "[q] - quit monitor     [K] - kill foamRun      [1]...[5] - refresh rate"
-set label 198 help at screen 0.02, 0.02 tc rgb "cyan" font "Arial,16"
-set label 199 case at screen 0.99,0.02 right tc rgb "magenta" font ",16"
+set label 198 help at screen 0.02, 0.02 tc rgb "cyan" font "Arial,12"
+set label 199 case at screen 0.99,0.02 right tc rgb "magenta" font ",12"
 
 
 		
@@ -81,9 +82,9 @@ if (system("test -e postProcessing/residuals/0/residuals.dat && echo 1 || echo 0
 		# make strings to display live info
 		current_time = system("date +%H:%M:%S")
 		last_save = system("foamListTimes -latestTime -processor")
-		set label 110 "Updated........... ".current_time at screen 0.82, 0.91 tc rgb "yellow" font "Arial,16"
-		set label 111 "Refresh............ ".refresh.'s' at screen 0.82, 0.71 tc rgb "yellow" font "Arial,16"
-		set label 112 "Last save..........".last_save at screen 0.82, 0.86 tc rgb "yellow" font "Ariel,16"
+		set label 110 "Updated........... ".current_time at screen 0.82, 0.895 tc rgb "white" font "Arial,16"
+		set label 111 "Refresh............ ".refresh.'s' at screen 0.82, 0.645 tc rgb "white" font "Arial,16"
+		set label 112 "Last save..........".last_save at screen 0.82, 0.845 tc rgb "white" font "Ariel,16"
 
 		# find max. values for probes
 		stats '< tail -n '.n_iter.' postProcessing/inletProbes/'.latest_inlet_probe.'/p'  skip s u 2 name 'p' nooutput
@@ -93,8 +94,8 @@ if (system("test -e postProcessing/residuals/0/residuals.dat && echo 1 || echo 0
 
 		# calc. inlet T convergence in last n_iter iters. in %
 		if (real(system("wc -l postProcessing/inletProbes/".latest_inlet_probe."/T | awk '{print $1}'") > c_iter+3)) {
-			last_T = system("tail -n 1 postProcessing/inletProbes/".latest_inlet_probe."/T | awk '{print $2}'")
-			prev_T = system("tail -n ".c_iter." postProcessing/inletProbes/".latest_inlet_probe."/T | head -n 1 | awk '{print $2}'")
+			last_T = system("tail -n 1 postProcessing/inletProbes/".latest_inlet_probe."/T 2>/dev/null | awk '{print $2}'")
+			prev_T = system("tail -n ".c_iter." postProcessing/inletProbes/".latest_inlet_probe."/T 2>/dev/null | head -n 1 | awk '{print $2}'")
 			dTin = sprintf("%.1f", (last_T - prev_T)/prev_T * 100 )  # percentage of change in last 500 iterations
 		} else {
 			dTin = "..."
@@ -102,8 +103,8 @@ if (system("test -e postProcessing/residuals/0/residuals.dat && echo 1 || echo 0
 		
 		# calc. outlet T convergence in last n_iter iters. in %
 		if (real(system("wc -l postProcessing/outletProbes/".latest_outlet_probe."/T | awk '{print $1}'") > c_iter+3)) {
-			last_T = system("tail -n 1 postProcessing/outletProbes/".latest_outlet_probe."/T | awk '{print $2}'")
-			prev_T = system("tail -n ".c_iter." postProcessing/outletProbes/".latest_outlet_probe."/T | head -n 1 | awk '{print $2}'")
+			last_T = system("tail -n 1 postProcessing/outletProbes/".latest_outlet_probe."/T 2>/dev/null | awk '{print $2}'")
+			prev_T = system("tail -n ".c_iter." postProcessing/outletProbes/".latest_outlet_probe."/T 2>/dev/null | head -n 1 | awk '{print $2}'")
 			dTout = sprintf("%.1f", (last_T - prev_T)/prev_T * 100 )  # percentage of change in last 500 iterations
 		} else {
 			dTout = "..."
@@ -111,8 +112,8 @@ if (system("test -e postProcessing/residuals/0/residuals.dat && echo 1 || echo 0
 		
 		# calc. inlet p convergence in last n_iter iters. in % 
 		if (real(system("wc -l postProcessing/outletProbes/".latest_outlet_probe."/T | awk '{print $1}'") > c_iter+3)) {
-			last_p = system("tail -n 1 postProcessing/inletProbes/".latest_inlet_probe."/p | awk '{print $2}'")
-			prev_p = system("tail -n ".c_iter." postProcessing/inletProbes/".latest_inlet_probe."/p | head -n 1 | awk '{print $2}'")
+			last_p = system("tail -n 1 postProcessing/inletProbes/".latest_inlet_probe."/p 2>/dev/null | awk '{print $2}'")
+			prev_p = system("tail -n ".c_iter." postProcessing/inletProbes/".latest_inlet_probe."/p 2>/dev/null | head -n 1 | awk '{print $2}'")
 			dp = sprintf("%.1f", (last_p - prev_p)/prev_p * 100 )  # percentage of change in last 500 iterations
 		} else {
 			dp = "..."
