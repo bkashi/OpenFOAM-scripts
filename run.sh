@@ -75,14 +75,12 @@ case "$1" in
         latest_res="0"
         runApplication decomposePar -latestTime
         runParallel foamRun &
-        while ! grep -q "Time = 5s" log.foamRun; do
+        while [ $(grep -c "Execution" log.foamRun | wc -l) -lt 5 ]; do
             echo "Waiting for 5 iterations..."
             sleep 3
         done
-        if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
-            echo "Launching Gnuplot monitor..."
-            gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
-        fi
+        echo "Launching Gnuplot monitor..."
+        gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
         ;;
 
 	-cont)
@@ -92,16 +90,13 @@ case "$1" in
         rm log.decomposePar log.foamRun
         runApplication decomposePar -latestTime
         runParallel foamRun &
-        while ! grep -q "Time = 5s" log.foamRun; do
+        while [ $(grep "Execution" log.foamRun | wc -l) -lt 5 ]; do
             echo "Waiting for 5 iterations..."
             sleep 3
         done
-        if [ -f ~/OpenFOAM/scripts/monitor.gp ]; then
-            echo "Launching Gnuplot monitor..."
-            gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
-        fi
+        echo "Launching Gnuplot monitor..."
+        gnuplot -c ~/OpenFOAM/scripts/monitor.gp &
         ;;
-
     *)
 esac
 
